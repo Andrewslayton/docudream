@@ -15,21 +15,35 @@ export const resolvers = {
           posts: true,
           followers: true,
           following: true,
+          likedPosts: true,
         },
       });
     },
     posts: async () => {
       return prisma.post.findMany({
         orderBy: { createdAt: "desc" },
-        include: { author: true },
+        include: {
+          author: true,
+          likedBy: true,
+        },
       });
     },
-    searchUsers: async (_: any, { query }: { query: string }) => {
+    searchUsers: async (
+      _: any,
+      { query }: { query: string },
+      { user }: { user: { id: string } | null }
+    ) => {
+      if (!user) throw new Error("Not authenticated");
       return prisma.user.findMany({
         where: {
-          OR: [
-            { name: { contains: query, mode: "insensitive" } },
-            { email: { contains: query, mode: "insensitive" } },
+          AND: [
+            {
+              OR: [
+                { name: { contains: query, mode: "insensitive" } },
+                { email: { contains: query, mode: "insensitive" } },
+              ],
+            },
+            { id: { not: user.id } },
           ],
         },
         take: 10,
@@ -42,6 +56,7 @@ export const resolvers = {
           posts: true,
           followers: true,
           following: true,
+          likedPosts: true,
         },
       });
     },
@@ -109,37 +124,56 @@ export const resolvers = {
     },
     followUser: async (
       _: any,
-      { followingId }: { followingId: string },
+      { userId }: { userId: string },
       { user }: { user: { id: string } | null }
     ) => {
       if (!user) throw new Error("Not authenticated");
-      if (user.id === followingId) throw new Error("Cannot follow yourself");
+      if (user.id === userId) throw new Error("Cannot follow yourself");
 
       // Check if already following
       const existingFollow = await prisma.follow.findUnique({
         where: {
           followerId_followingId: {
             followerId: user.id,
-            followingId,
+            followingId: userId,
           },
         },
       });
 
       if (existingFollow) {
-        return { success: false, message: "Already following this user" };
+        return {
+          success: false,
+          message: "Already following this user",
+          id: null,
+          followers: [],
+        };
       }
 
       try {
         await prisma.follow.create({
           data: {
             follower: { connect: { id: user.id } },
-            following: { connect: { id: followingId } },
+            following: { connect: { id: userId } },
           },
         });
-        return { success: true, message: "Successfully followed user" };
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          include: { followers: true },
+        });
+        return {
+          success: true,
+          message: "Successfully followed user",
+          id: updatedUser?.id,
+          followers: updatedUser?.followers || [],
+        };
       } catch (error) {
         console.error("Follow error:", error);
-        return { success: false, message: "Failed to follow user" };
+        return {
+          success: false,
+          message: "Failed to follow user",
+          id: null,
+          followers: [],
+        };
       }
     },
     unfollowUser: async (
@@ -164,6 +198,53 @@ export const resolvers = {
         return { success: false, message: "Failed to unfollow user" };
       }
     },
+    toggleLike: async (
+      _: any,
+      { postId }: { postId: string },
+      { user }: { user: { id: string } | null }
+    ) => {
+      if (!user) throw new Error("Not authenticated");
+
+      try {
+        const post = await prisma.post.findUnique({
+          where: { id: postId },
+          include: { likedBy: true },
+        });
+
+        if (!post) {
+          return { success: false, message: "Post not found", liked: false };
+        }
+
+        const hasLiked = post.likedBy.some((liker) => liker.id === user.id);
+
+        if (hasLiked) {
+          await prisma.post.update({
+            where: { id: postId },
+            data: {
+              likedBy: { disconnect: { id: user.id } },
+              likes: { decrement: 1 },
+            },
+          });
+          return { success: true, message: "Post unliked", liked: false };
+        } else {
+          await prisma.post.update({
+            where: { id: postId },
+            data: {
+              likedBy: { connect: { id: user.id } },
+              likes: { increment: 1 },
+            },
+          });
+          return { success: true, message: "Post liked", liked: true };
+        }
+      } catch (error) {
+        console.error("Like error:", error);
+        return {
+          success: false,
+          message: "Failed to toggle like",
+          liked: false,
+        };
+      }
+    },
   },
   User: {
     followers: async (parent: { id: string }) => {
@@ -181,6 +262,18 @@ export const resolvers = {
           include: { following: true },
         })
         .then((follows) => follows.map((follow) => follow.following));
+    },
+    likedPosts: async (parent: { id: string }) => {
+      return prisma.post.findMany({
+        where: { likedBy: { some: { id: parent.id } } },
+      });
+    },
+  },
+  Post: {
+    likedBy: async (parent: { id: string }) => {
+      return prisma.user.findMany({
+        where: { likedPosts: { some: { id: parent.id } } },
+      });
     },
   },
 };

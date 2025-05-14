@@ -10,6 +10,7 @@ export const typeDefs = gql`
     posts: [Post!]!
     followers: [User!]!
     following: [User!]!
+    likedPosts: [Post!]!
   }
 
   type Post {
@@ -20,6 +21,7 @@ export const typeDefs = gql`
     updatedAt: String!
     likes: Int!
     author: User!
+    likedBy: [User!]!
   }
 
   type AuthPayload {
@@ -30,6 +32,14 @@ export const typeDefs = gql`
   type FollowResponse {
     success: Boolean!
     message: String!
+    id: ID
+    followers: [User!]
+  }
+
+  type LikeResponse {
+    success: Boolean!
+    message: String!
+    liked: Boolean!
   }
 
   type Query {
@@ -40,10 +50,11 @@ export const typeDefs = gql`
   }
 
   type Mutation {
-    register(name: String!, email: String!, password: String!): AuthPayload!
+    register(name: String, email: String!, password: String!): AuthPayload!
     login(email: String!, password: String!): AuthPayload!
     createPost(title: String!, body: String!): Post!
-    followUser(followingId: ID!): FollowResponse!
+    followUser(userId: ID!): FollowResponse!
     unfollowUser(followingId: ID!): FollowResponse!
+    toggleLike(postId: String!): LikeResponse!
   }
 `;
