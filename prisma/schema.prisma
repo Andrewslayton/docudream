@@ -21,4 +21,29 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  posts     Post[]
+  followers Follow[] @relation("following")
+  following Follow[] @relation("followers")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  likes     Int      @default(0)
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  follower    User     @relation("following", fields: [followerId], references: [id])
+  followerId  String
+  following   User     @relation("followers", fields: [followingId], references: [id])
+  followingId String
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
 }

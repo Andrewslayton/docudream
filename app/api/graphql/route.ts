@@ -20,6 +20,7 @@ const handler = startServerAndCreateNextHandler(server, {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
       return { user: { id: decoded.userId } };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       return { user: null };
     }
